@@ -75,7 +75,16 @@ int main(int argc, char * argv[]) {
     ForestPredictor predictor = ForestPredictors::regression_predictor(forest_options.get_num_threads(), forest_options.get_ci_group_size());
     std::vector<Prediction> predictions = predictor.predict_oob(forest, data.get());
     
-    std::cout << "Done\n";
+    std::cout << "Computing MSE\n";
+    double mse = 0;
+    auto obs = forest.get_observations();
+    auto n = obs.get_num_samples();
+    for (int i=0; i < n; ++i) {
+        double diff = (obs.get(0, i) - predictions[i].get_predictions()[0]);
+        mse += diff * diff;
+    }
+    mse /= n;
+    std::cout << "MSE: " << mse;
 
     return 0;
 }
