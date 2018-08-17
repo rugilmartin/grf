@@ -1,0 +1,4 @@
+# xcode
+core/xcode/DerivedData/**
+core/cmake-build-debug/**
+

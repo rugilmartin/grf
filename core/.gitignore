@@ -13,3 +13,9 @@
 .settings/*
 .project
 .cproject
+
+# xcode files
+xcode/DeriveData/**
+
+# cmake
+cmake-build-debug/**
