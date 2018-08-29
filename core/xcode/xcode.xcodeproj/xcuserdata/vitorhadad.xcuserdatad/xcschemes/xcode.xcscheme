@@ -62,6 +62,16 @@
             ReferencedContainer = "container:xcode.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+         <CommandLineArgument
+            argument = "--input_file=/Users/vitorhadad/Documents/grf/core/test/forest/resources/gaussian_data.csv"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "--outcome_index=10"
+            isEnabled = "YES">
+         </CommandLineArgument>
+      </CommandLineArguments>
       <AdditionalOptions>
       </AdditionalOptions>
       <LocationScenarioReference

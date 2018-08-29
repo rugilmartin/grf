@@ -44,6 +44,7 @@ const Forest ForestTrainer::train(Data* data,
     throw std::runtime_error("The sample fraction is too small, as no observations will be sampled.");
   }
 
+  // Sorts data by variable type, in {OUTCOME, TREATMENT, INSTRUMENT}
   size_t num_types = observables.size();
   std::vector<std::vector<double>> observations_by_type(num_types);
   for (auto it : observables) {

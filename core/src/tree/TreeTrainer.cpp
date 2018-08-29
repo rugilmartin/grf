@@ -39,6 +39,8 @@ std::shared_ptr<Tree> TreeTrainer::train(Data* data,
                                          RandomSampler& sampler,
                                          const std::vector<size_t>& clusters,
                                          const TreeOptions& options) const {
+    
+    
   std::vector<std::vector<size_t>> child_nodes;
   std::vector<std::vector<size_t>> nodes;
   std::vector<size_t> split_vars;
@@ -48,15 +50,21 @@ std::shared_ptr<Tree> TreeTrainer::train(Data* data,
   child_nodes.push_back(std::vector<size_t>());
   create_empty_node(child_nodes, nodes, split_vars, split_values);
 
+  // Used to store oob?
   std::vector<size_t> new_leaf_samples;
 
   if (options.get_honesty()) {
     std::vector<size_t> tree_growing_clusters;
     std::vector<size_t> new_leaf_clusters;
+      
+    // Populates (tree_growing_clusters, new_leaf_clusters) with (split, estimation) samples
     sampler.subsample(clusters, 0.5, tree_growing_clusters, new_leaf_clusters);
 
+    // Populates the root node of the tree with the splitting sample
     sampler.sample_from_clusters(tree_growing_clusters, nodes[0]);
+    // Populates new_leaf_samples with the rest of the sample
     sampler.sample_from_clusters(new_leaf_clusters, new_leaf_samples);
+      
   } else {
     sampler.sample_from_clusters(clusters, nodes[0]);
   }
@@ -103,8 +111,7 @@ std::shared_ptr<Tree> TreeTrainer::train(Data* data,
 
   PredictionValues prediction_values;
   if (prediction_strategy != NULL) {
-    prediction_values = prediction_strategy->precompute_prediction_values(
-        tree->get_leaf_samples(), observations);
+    prediction_values = prediction_strategy->precompute_prediction_values(tree->get_leaf_samples(), observations);
   }
   tree->set_prediction_values(prediction_values);
 
