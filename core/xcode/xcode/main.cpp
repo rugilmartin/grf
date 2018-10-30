@@ -37,9 +37,10 @@ ForestOptions parse_forest_options(cxxopts::ParseResult result) {
     return(opt);
 };
 
-Forest load_forest_from_file(std::string in_serial_name) {
+Forest load_forest_from_file(std::string filename) {
     std::ifstream infile;
-    infile.open(in_serial_name, std::ios::binary);
+    infile.open(filename, std::ios::binary);
+    if (!infile.good()) throw std::runtime_error("Could not open " + filename + ".");
     ForestSerializer forest_loader;
     Forest forest = forest_loader.deserialize(infile);
     return(forest);
@@ -66,12 +67,10 @@ void save_predictions_to_file(std::string filename, std::vector<Prediction> pred
     if (!outfile.good()) throw std::runtime_error("Could not open " + filename + ".");
     for (auto&p: predictions) {
         auto yhat = p.get_predictions()[0];
-        std::cout << yhat << "\n";
+        outfile << yhat << "\n";
     }
     outfile.close();
 }
-
-
 
 
 int main(int argc, char * argv[]) {
@@ -93,7 +92,7 @@ int main(int argc, char * argv[]) {
     ("b,compute_oob_predictions", "Compute OOB predictions", cxxopts::value<bool>()->default_value("true"))
     ("y,outcome_index", "Outcome index", cxxopts::value<uint>())
     ("I,input_file", "Input file", cxxopts::value<std::string>())
-    ("W,write", "Write forest to file", cxxopts::value<std::string>()->default_value("output.forest"))
+    ("W,write", "Write forest to file", cxxopts::value<std::string>()->default_value(""))
     ("L,load", "Load forest from file", cxxopts::value<std::string>()->default_value(""))
     ("O,output_file", "File that will receive predictions", cxxopts::value<std::string>()->default_value(""))
     ;
@@ -118,7 +117,7 @@ int main(int argc, char * argv[]) {
     Forest forest = in_serial_name.size() ? load_forest_from_file(in_serial_name) : train_regression_forest(std::move(data), forest_options, outcome_index);
     
     // Serialize forest, if applicable
-    if (!out_serial_name.empty()) save_forest_to_file(out_serial_name + ".forest", forest);
+    if (!out_serial_name.empty()) save_forest_to_file(out_serial_name, forest);
 
     // Save predictions
     if (!output_file.empty()) {
