@@ -28,6 +28,7 @@ ForestOptions parse_forest_options(cxxopts::ParseResult result) {
         result["mtry"].as<uint>(),
         result["min_node_size"].as<uint>(),
         result["honesty"].as<bool>(),
+        result["honesty_fraction"].as<double>(),
         result["alpha"].as<double>(),
         result["imbalance_penalty"].as<double>(),
         result["num_threads"].as<uint>(),
@@ -85,6 +86,7 @@ int main(int argc, char * argv[]) {
     ("t,num_trees", "Number of trees", cxxopts::value<uint>()->default_value("2000"))
     ("d,num_threads", "Number of threads", cxxopts::value<uint>()->default_value("4"))
     ("h,honesty", "Input", cxxopts::value<bool>()->default_value("true"))
+    ("r,honesty_fraction", "Input", cxxopts::value<double>()->default_value("0.5"))
     ("g,ci_group_size", "Confidence interval group size", cxxopts::value<uint>()->default_value("2"))
     ("a,alpha", "Maximum imbalance parameter", cxxopts::value<double>()->default_value("5"))
     ("p,imbalance_penalty", "Imbalance penalty", cxxopts::value<double>()->default_value("0"))
