@@ -1,4 +1,1 @@
-# xcode
-core/xcode/DerivedData/**
-core/cmake-build-debug/**
-
+*.DS_Store
