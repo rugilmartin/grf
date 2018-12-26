@@ -108,6 +108,64 @@ validate_samples_per_cluster <- function(samples_per_cluster, clusters) {
   samples_per_cluster
 }
 
+validate_honesty_fraction <- function(honesty.fraction, honesty) {
+  if (!honesty) {
+      if (is.null(honesty.fraction)) {
+        return(NULL)
+      }
+      else {
+        stop("honesty.fraction is not used when honesty = FALSE and should be NULL in this case.")
+      }
+  } else if (is.null(honesty.fraction)) {
+    return(0.5)
+  } else if (honesty.fraction > 0 && honesty.fraction < 1) {
+    return(honesty.fraction)
+  } else {
+    stop("honesty.fraction must be a positive real number less than 1.")
+  }
+}
+
+validate_ll_vars <- function(linear.correction.variables, num.cols){
+  if (is.null(linear.correction.variables)) {
+    linear.correction.variables = 1:num.cols
+  }
+  if (min(linear.correction.variables) < 1) {
+    stop("Linear correction variables must take positive integer values.")
+  } else if (max(linear.correction.variables) > num.cols) {
+    stop("Invalid range of correction variables.")
+  } else if (!is.vector(linear.correction.variables) | !all(linear.correction.variables == floor(linear.correction.variables))) {
+    stop("Linear correction variables must be a vector of integers.")
+  }
+  linear.correction.variables
+}
+
+validate_ll_lambda <- function(lambda){
+  if (lambda < 0) {
+    stop("Lambda cannot be negative.")
+  } else if (!is.numeric(lambda) | length(lambda) > 1) {
+    stop("Lambda must be a scalar.")
+  }
+  lambda
+}
+
+validate_ll_path <- function(lambda.path){
+  if (is.null(lambda.path)) {
+    lambda.path = c(0, 0.001, 0.01, 0.05, 0.1, 0.3, 0.5, 0.7, 1, 10)
+  } else if (min(lambda.path)<0) {
+    stop("Lambda values cannot be negative.")
+  } else if (!is.numeric(lambda.path)) {
+    stop("Lambda values must be numeric.")
+  }
+  lambda.path
+}
+
+coerce_honesty_fraction <- function(honesty.fraction) {
+  if(is.null(honesty.fraction)) {
+    return(0)
+  }
+  honesty.fraction
+}
+
 create_data_matrices <- function(X, ...) {
   default.data <- matrix(nrow=0, ncol=0);    
   sparse.data <- new("dgCMatrix", Dim = c(0L, 0L))
