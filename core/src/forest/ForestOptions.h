@@ -38,7 +38,8 @@ public:
                 uint num_threads,
                 uint random_seed,
                 const std::vector<size_t>& sample_clusters,
-                uint samples_per_cluster);
+                uint samples_per_cluster,
+                std::ostream* verbose_out);
 
   static uint validate_num_threads(uint num_threads);
 
@@ -51,6 +52,7 @@ public:
 
   uint get_num_threads() const;
   uint get_random_seed() const;
+  std::ostream* get_verbose_out() const;
 
 private:
   uint num_trees;
@@ -58,6 +60,7 @@ private:
   double sample_fraction;
 
   TreeOptions tree_options;
+  std::ostream* verbose_out;
   SamplingOptions sampling_options;
 
   uint num_threads;

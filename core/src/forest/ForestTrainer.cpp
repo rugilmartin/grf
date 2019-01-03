@@ -38,6 +38,7 @@ const Forest ForestTrainer::train(Data* data,
                                   const ForestOptions& options) const {
   size_t num_samples = data->get_num_rows();
   uint num_trees = options.get_num_trees();
+  std::ostream* verbose_out = options.get_verbose_out();
 
   // Ensure that the sample fraction is not too small and honesty fraction is not too extreme.
   const TreeOptions& tree_options = options.get_tree_options();
@@ -80,6 +81,9 @@ const Forest ForestTrainer::train(Data* data,
     size_t start_index = thread_ranges[i];
     size_t num_trees_batch = thread_ranges[i + 1] - start_index;
 
+    if(verbose_out)
+        *verbose_out << "    ->Trained " << start_index << "/" << num_trees << " trees \r" << std::flush;
+
     futures.push_back(std::async(std::launch::async,
                                  &ForestTrainer::train_batch,
                                  this,
@@ -88,6 +92,11 @@ const Forest ForestTrainer::train(Data* data,
                                  data,
                                  observations,
                                  options));
+  }
+
+  if(verbose_out) {
+    *verbose_out << "    ->Trained " << num_trees << "/" << num_trees << " trees" << std::endl;
+    *verbose_out << "    ->Creating forest" << std::endl;
   }
 
   for (auto& future : futures) {
