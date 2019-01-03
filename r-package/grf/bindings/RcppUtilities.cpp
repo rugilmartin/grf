@@ -129,3 +129,13 @@ Rcpp::NumericMatrix RcppUtilities::create_error_matrix(const std::vector<Predict
   }
   return result;
 }
+
+std::ostream* RcppUtilities::verbose_out(bool verbose){
+  std::ostream* verbose_out;
+  if (verbose) {
+    verbose_out = &Rcpp::Rcout;
+  } else {
+    verbose_out = nullptr;
+  }
+  return verbose_out;
+}
