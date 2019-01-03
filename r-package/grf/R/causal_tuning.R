@@ -123,7 +123,8 @@ tune_causal_forest <- function(X, Y, W,
                                        as.numeric(params["imbalance.penalty"]),
                                        stabilize.splits,
                                        clusters,
-                                       samples_per_cluster)
+                                       samples_per_cluster,
+                                       FALSE)
     prediction = instrumental_predict_oob(small.forest, data$default, data$sparse,
                                           num.threads, ci.group.size)
     mean(prediction$debiased.error, na.rm = TRUE)

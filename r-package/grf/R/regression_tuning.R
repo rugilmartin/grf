@@ -113,7 +113,8 @@ tune_regression_forest <- function(X, Y,
                                      as.numeric(params["alpha"]),
                                      as.numeric(params["imbalance.penalty"]),
                                      clusters,
-                                     samples_per_cluster)
+                                     samples_per_cluster,
+                                     FALSE)
 
     prediction = regression_predict_oob(small.forest, data$default, data$sparse,
                                             num.threads, ci.group.size)
