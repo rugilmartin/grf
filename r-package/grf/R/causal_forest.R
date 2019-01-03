@@ -52,6 +52,7 @@
 #' @param num.fit.reps The number of forests used to fit the tuning model.
 #' @param num.optimize.reps The number of random parameter values considered when using the model
 #'                          to select the optimal parameters.
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #'
 #' @return A trained causal forest object.
 #'
@@ -126,7 +127,8 @@ causal_forest <- function(X, Y, W,
                           tune.parameters = FALSE,
                           num.fit.trees = 200,
                           num.fit.reps = 50,
-                          num.optimize.reps = 1000) {
+                          num.optimize.reps = 1000,
+                          verbose = FALSE) {
     validate_X(X)
     if(length(Y) != nrow(X)) { stop("Y has incorrect length.") }
     if(length(W) != nrow(X)) { stop("W has incorrect length.") }
@@ -138,8 +140,9 @@ causal_forest <- function(X, Y, W,
     honesty.fraction <- validate_honesty_fraction(honesty.fraction, honesty)
     
     reduced.form.weight <- 0
-
+    
     if (is.null(Y.hat)) {
+      if(verbose) cat("--Orthogonalize Y \n")
       forest.Y <- regression_forest(X, Y, sample.fraction = sample.fraction, mtry = mtry, tune.parameters = tune.parameters,
                                     num.trees = min(500, num.trees), num.threads = num.threads, min.node.size = NULL, honesty = TRUE,
                                     honesty.fraction = NULL, seed = seed, ci.group.size = 1, alpha = alpha, imbalance.penalty = imbalance.penalty,
@@ -152,6 +155,7 @@ causal_forest <- function(X, Y, W,
     }
 
     if (is.null(W.hat)) {
+      if(verbose) cat("--Orthogonalize W \n")
       forest.W <- regression_forest(X, W, sample.fraction = sample.fraction, mtry = mtry, tune.parameters = tune.parameters,
                                     num.trees = min(500, num.trees), num.threads = num.threads, min.node.size = NULL, honesty = TRUE,
                                     honesty.fraction = NULL, seed = seed, ci.group.size = 1, alpha = alpha, imbalance.penalty = imbalance.penalty,
@@ -167,6 +171,7 @@ causal_forest <- function(X, Y, W,
     W.centered = W - W.hat
 
     if (tune.parameters) {
+      if(verbose) cat("--Tuning parameters \n")
       tuning.output <- tune_causal_forest(X, Y.centered, W.centered,
                                           num.fit.trees = num.fit.trees,
                                           num.fit.reps = num.fit.reps,
@@ -198,6 +203,7 @@ causal_forest <- function(X, Y, W,
     treatment.index <- ncol(X) + 2
     instrument.index <- treatment.index
 
+    if(verbose) cat("--Training forest \n")
     forest <- instrumental_train(data$default, data$sparse,
                                  outcome.index, treatment.index, instrument.index,
                                  as.numeric(tunable.params["mtry"]),
@@ -214,7 +220,8 @@ causal_forest <- function(X, Y, W,
                                  as.numeric(tunable.params["imbalance.penalty"]),
                                  stabilize.splits,
                                  clusters,
-                                 samples_per_cluster)
+                                 samples_per_cluster,
+                                 verbose)
 
     forest[["ci.group.size"]] <- ci.group.size
     forest[["X.orig"]] <- X
@@ -228,11 +235,12 @@ causal_forest <- function(X, Y, W,
     class(forest) <- c("causal_forest", "grf")
 
     if (compute.oob.predictions) {
-        oob.pred <- predict(forest)
+        if(verbose) cat("--Computing out-of-bag predictions \n")
+        oob.pred <- predict(forest, verbose = verbose)
         forest[["predictions"]] <- oob.pred$predictions
         forest[["debiased.error"]] <- oob.pred$debiased.error
     }
-
+    
     forest
 }
 
@@ -249,6 +257,7 @@ causal_forest <- function(X, Y, W,
 #'                    automatically selects an appropriate amount.
 #' @param estimate.variance Whether variance estimates for hat{tau}(x) are desired
 #'                          (for confidence intervals).
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return Vector of predictions, along with (optional) variance estimates.
@@ -276,14 +285,21 @@ causal_forest <- function(X, Y, W,
 #'
 #' @method predict causal_forest
 #' @export
-predict.causal_forest <- function(object, newdata = NULL, num.threads = NULL, estimate.variance = FALSE, ...) {
+predict.causal_forest <- function(object, 
+                                  newdata = NULL, 
+                                  num.threads = NULL, 
+                                  estimate.variance = FALSE, 
+                                  verbose = FALSE,
+                                  ...) {
 
     # If possible, use pre-computed predictions.
     if (is.null(newdata) & !estimate.variance & !is.null(object$predictions)) {
+        if(verbose) cat("    ->Pre-computed predictions \n")
         return(data.frame(predictions=object$predictions,
                           debiased.error=object$debiased.error))
     }
 
+    if(verbose) cat("    ->Setup \n")
     num.threads <- validate_num_threads(num.threads)
 
     if (estimate.variance) {
@@ -294,10 +310,12 @@ predict.causal_forest <- function(object, newdata = NULL, num.threads = NULL, es
 
     forest.short <- object[-which(names(object) == "X.orig")]
     if (!is.null(newdata)) {
+        if(verbose) cat("    ->Predictions on new data \n")
         data <- create_data_matrices(newdata)
         ret <- instrumental_predict(forest.short, data$default, data$sparse,
                                     num.threads, ci.group.size)
     } else {
+        if(verbose) cat("    ->Out-of-bag predictions \n")
         data <- create_data_matrices(object[["X.orig"]])
         ret <- instrumental_predict_oob(forest.short, data$default, data$sparse,
                                         num.threads, ci.group.size)

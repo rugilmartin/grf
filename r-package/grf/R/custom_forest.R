@@ -26,6 +26,7 @@
 #' @param samples_per_cluster If sampling by cluster, the number of observations to be sampled from
 #'                            each cluster. Must be less than the size of the smallest cluster. If set to NULL
 #'                            software will set this value to the size of the smallest cluster.
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #'
 #' @return A trained regression forest object.
 #'
@@ -46,7 +47,7 @@
 custom_forest <- function(X, Y, sample.fraction = 0.5, mtry = NULL, 
     num.trees = 2000, num.threads = NULL, min.node.size = NULL, honesty = TRUE,
     honesty.fraction = NULL, alpha = 0.05, imbalance.penalty = 0.0, seed = NULL,
-    clusters = NULL, samples_per_cluster = NULL) {
+    clusters = NULL, samples_per_cluster = NULL, verbose = FALSE) {
 
     validate_X(X)
     if(length(Y) != nrow(X)) { stop("Y has incorrect length.") }
@@ -66,9 +67,10 @@ custom_forest <- function(X, Y, sample.fraction = 0.5, mtry = NULL,
     outcome.index <- ncol(X) + 1
     ci.group.size <- 1
 
+    if(verbose) cat("--Training forest \n")
     forest <- custom_train(data$default, data$sparse, outcome.index, mtry,num.trees, num.threads,
         min.node.size, sample.fraction, seed, honesty, coerce_honesty_fraction(honesty.fraction),
-        ci.group.size, alpha, imbalance.penalty, clusters, samples_per_cluster)
+        ci.group.size, alpha, imbalance.penalty, clusters, samples_per_cluster, verbose)
     
     forest[["X.orig"]] <- X
     class(forest) <- c("custom_forest", "grf")
@@ -84,6 +86,7 @@ custom_forest <- function(X, Y, sample.fraction = 0.5, mtry = NULL,
 #'                not use the i-th training example).
 #' @param num.threads Number of threads used in training. If set to NULL, the software
 #'                    automatically selects an appropriate amount.
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return Vector of predictions.
@@ -103,8 +106,9 @@ custom_forest <- function(X, Y, sample.fraction = 0.5, mtry = NULL,
 #'
 #' @method predict custom_forest
 #' @export
-predict.custom_forest <- function(object, newdata = NULL, num.threads = NULL, ...) {
+predict.custom_forest <- function(object, newdata = NULL, num.threads = NULL, verbose = FALSE, ...) {
     
+    if(verbose) cat("    ->Setup \n")
     if (is.null(num.threads)) {
         num.threads <- 0
     } else if (!is.numeric(num.threads) | num.threads < 0) {
@@ -114,9 +118,11 @@ predict.custom_forest <- function(object, newdata = NULL, num.threads = NULL, ..
     forest.short <- object[-which(names(object) == "X.orig")]
 
     if (!is.null(newdata)) {
+        if(verbose) cat("    ->Predictions on new data \n")
         data <- create_data_matrices(newdata)
         custom_predict(forest.short, data$default, data$sparse, num.threads)
     } else {
+        if(verbose) cat("    ->Out-of-bag predictions \n")
         data <- create_data_matrices(object[["X.orig"]])
         custom_predict_oob(forest.short, data$default, data$sparse, num.threads)
     }

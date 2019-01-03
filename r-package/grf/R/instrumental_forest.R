@@ -49,6 +49,7 @@
 #' @param samples_per_cluster If sampling by cluster, the number of observations to be sampled from
 #'                            each cluster. Must be less than the size of the smallest cluster. If set to NULL
 #'                            software will set this value to the size of the smallest cluster.
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #'
 #' @return A trained instrumental forest object.
 #' @export
@@ -71,7 +72,8 @@ instrumental_forest <- function(X, Y, W, Z,
                                 compute.oob.predictions = TRUE,
                                 seed = NULL,
                                 clusters = NULL,
-                                samples_per_cluster = NULL) {
+                                samples_per_cluster = NULL,
+                                verbose = FALSE) {
     validate_X(X)
     if(length(Y) != nrow(X)) { stop("Y has incorrect length.") }
     if(length(W) != nrow(X)) { stop("W has incorrect length.") }
@@ -92,6 +94,7 @@ instrumental_forest <- function(X, Y, W, Z,
     }
     
     if (is.null(Y.hat)) {
+      if(verbose) cat("--Orthogonalize Y \n")
       forest.Y <- regression_forest(X, Y, sample.fraction = sample.fraction, mtry = mtry, 
                                     num.trees = min(500, num.trees), num.threads = num.threads, min.node.size = NULL, honesty = TRUE,
                                     honesty.fraction = NULL, seed = seed, ci.group.size = 1, alpha = alpha, imbalance.penalty = imbalance.penalty,
@@ -104,6 +107,7 @@ instrumental_forest <- function(X, Y, W, Z,
     }
     
     if (is.null(W.hat)) {
+      if(verbose) cat("--Orthogonalize W \n")
       forest.W <- regression_forest(X, W, sample.fraction = sample.fraction, mtry = mtry, 
                                     num.trees = min(500, num.trees), num.threads = num.threads, min.node.size = NULL, honesty = TRUE,
                                     honesty.fraction = NULL, seed = seed, ci.group.size = 1, alpha = alpha, imbalance.penalty = imbalance.penalty,
@@ -116,6 +120,7 @@ instrumental_forest <- function(X, Y, W, Z,
     }
     
     if (is.null(Z.hat)) {
+      if(verbose) cat("--Ortogonalize Z \n")
       forest.Z <- regression_forest(X, Z, sample.fraction = sample.fraction, mtry = mtry, 
                                     num.trees = min(500, num.trees), num.threads = num.threads, min.node.size = NULL, honesty = TRUE,
                                     honesty.fraction = NULL, seed = seed, ci.group.size = 1, alpha = alpha, imbalance.penalty = imbalance.penalty,
@@ -133,10 +138,11 @@ instrumental_forest <- function(X, Y, W, Z,
     treatment.index <- ncol(X) + 2
     instrument.index <- ncol(X) + 3
     
+    if(verbose) cat("--Training forest \n")
     forest <- instrumental_train(data$default, data$sparse, outcome.index, treatment.index,
         instrument.index, mtry, num.trees, num.threads, min.node.size, sample.fraction, seed, honesty,
         coerce_honesty_fraction(honesty.fraction), ci.group.size, reduced.form.weight, alpha, 
-        imbalance.penalty, stabilize.splits, clusters, samples_per_cluster)
+        imbalance.penalty, stabilize.splits, clusters, samples_per_cluster, verbose)
 
     forest[["ci.group.size"]] <- ci.group.size
     forest[["X.orig"]] <- X
@@ -151,11 +157,12 @@ instrumental_forest <- function(X, Y, W, Z,
     class(forest) <- c("instrumental_forest", "grf")
 
     if (compute.oob.predictions) {
-        oob.pred <- predict(forest)
+        if(verbose) cat("--Computing out-of-bag predictions \n")
+        oob.pred <- predict(forest, verbose=verbose)
         forest[["predictions"]] <- oob.pred$predictions
         forest[["debiased.error"]] <- oob.pred$debiased.error
     }
-
+    
     forest
 }
 
@@ -172,6 +179,7 @@ instrumental_forest <- function(X, Y, W, Z,
 #'                    automatically selects an appropriate amount.
 #' @param estimate.variance Whether variance estimates for hat{tau}(x) are desired
 #'                          (for confidence intervals).
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return Vector of predictions, along with (optional) variance estimates.
@@ -181,14 +189,17 @@ instrumental_forest <- function(X, Y, W, Z,
 predict.instrumental_forest <- function(object, newdata = NULL,
                                         num.threads = NULL, 
                                         estimate.variance = FALSE,
+                                        verbose = FALSE,
                                         ...) {
 
     # If possible, use pre-computed predictions.
     if (is.null(newdata) & !estimate.variance & !is.null(object$predictions)) {
+        if(verbose) cat("    ->Pre-computed predictions \n")
         return(data.frame(predictions=object$predictions,
                           debiased.error=object$debiased.error))
     }
 
+    if(verbose) cat("    ->Setup \n")
     num.threads <- validate_num_threads(num.threads)
 
     if (estimate.variance) {
@@ -200,10 +211,12 @@ predict.instrumental_forest <- function(object, newdata = NULL,
     forest.short <- object[-which(names(object) == "X.orig")]
 
     if (!is.null(newdata)) {
+        if(verbose) cat("    ->Predictions on new data \n")
         data <- create_data_matrices(newdata)
         ret <- instrumental_predict(forest.short, data$default, data$sparse,
                                     num.threads, ci.group.size)
     } else {
+        if(verbose) cat("    ->Out-of-bag predictions \n")
         data <- create_data_matrices(object[["X.orig"]])
         ret <- instrumental_predict_oob(forest.short, data$default, data$sparse,
                                         num.threads, ci.group.size)

@@ -37,7 +37,8 @@
 #' @param num.fit.reps The number of forests used to fit the tuning model.
 #' @param num.optimize.reps The number of random parameter values considered when using the model
 #'                          to select the optimal parameters.
-#'
+#' @param verbose If true, prints the function's progress. Defaults to false.
+#' 
 #' @return A trained regression forest object.
 #'
 #' @examples \dontrun{
@@ -79,7 +80,8 @@ regression_forest <- function(X, Y,
                               tune.parameters = FALSE,
                               num.fit.trees = 10,
                               num.fit.reps = 100,
-                              num.optimize.reps = 1000) {
+                              num.optimize.reps = 1000,
+                              verbose = FALSE) {
     validate_X(X)
     if(length(Y) != nrow(X)) { stop("Y has incorrect length.") }
 
@@ -90,6 +92,7 @@ regression_forest <- function(X, Y,
     honesty.fraction <- validate_honesty_fraction(honesty.fraction, honesty)
     
     if (tune.parameters) {
+      if(verbose) cat("--Tuning parameters \n")
       tuning.output <- tune_regression_forest(X, Y,
                                               num.fit.trees = num.fit.trees,
                                               num.fit.reps = num.fit.reps,
@@ -118,6 +121,7 @@ regression_forest <- function(X, Y,
     data <- create_data_matrices(X, Y)
     outcome.index <- ncol(X) + 1
 
+    if(verbose) cat("--Training forest \n")
     forest <- regression_train(data$default, data$sparse, outcome.index,
                                as.numeric(tunable.params["mtry"]),
                                num.trees,
@@ -131,7 +135,8 @@ regression_forest <- function(X, Y,
                                as.numeric(tunable.params["alpha"]),
                                as.numeric(tunable.params["imbalance.penalty"]),
                                clusters,
-                               samples_per_cluster)
+                               samples_per_cluster,
+                               verbose)
 
     forest[["ci.group.size"]] <- ci.group.size
     forest[["X.orig"]] <- X
@@ -142,7 +147,8 @@ regression_forest <- function(X, Y,
     class(forest) <- c("regression_forest", "grf")
 
     if (compute.oob.predictions) {
-        oob.pred <- predict(forest)
+        if(verbose) cat("--Computing out-of-bag predictions \n")
+        oob.pred <- predict(forest, verbose=verbose)
         forest[["predictions"]] <- oob.pred$predictions
         forest[["debiased.error"]] <- oob.pred$debiased.error
     }
@@ -173,6 +179,7 @@ regression_forest <- function(X, Y,
 #'                    automatically selects an appropriate amount.
 #' @param estimate.variance Whether variance estimates for hat{tau}(x) are desired
 #'                          (for confidence intervals).
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return A vector of predictions.
@@ -199,7 +206,8 @@ regression_forest <- function(X, Y,
 #'
 #' @method predict regression_forest
 #' @export
-predict.regression_forest <- function(object, newdata = NULL,
+predict.regression_forest <- function(object, 
+                                      newdata = NULL,
                                       linear.correction.variables = NULL,
                                       ll.lambda = 0.01,
                                       tune.lambda = FALSE,
@@ -207,16 +215,19 @@ predict.regression_forest <- function(object, newdata = NULL,
                                       ll.weighted.penalty = FALSE,
                                       num.threads = NULL,
                                       estimate.variance = FALSE,
+                                      verbose = FALSE,
                                       ...) {
 
     local.linear = !is.null(linear.correction.variables)
 
     # If possible, use pre-computed predictions.
     if (is.null(newdata) & !estimate.variance & !local.linear & !is.null(object$predictions)) {
+        if(verbose) cat("    ->Pre-computed predictions \n")
         return(data.frame(predictions=object$predictions,
                           debiased.error=object$debiased.error))
     }
 
+    if(verbose) cat("    ->Setup \n")
     num.threads = validate_num_threads(num.threads)
 
     if (estimate.variance) {
@@ -243,6 +254,7 @@ predict.regression_forest <- function(object, newdata = NULL,
     }
 
     if (!is.null(newdata) ) {
+        if(verbose) cat("    ->Predictions on new data \n")
         data = create_data_matrices(newdata)
         if (!local.linear) {
             ret = regression_predict(forest.short, data$default, data$sparse,
@@ -254,6 +266,7 @@ predict.regression_forest <- function(object, newdata = NULL,
                 ci.group.size)
         }
     } else {
+        if(verbose) cat("    ->Out-of-bag predictions \n")
         data = create_data_matrices(X.orig)
         if (!local.linear) {
             ret = regression_predict_oob(forest.short, data$default, data$sparse, num.threads, ci.group.size)

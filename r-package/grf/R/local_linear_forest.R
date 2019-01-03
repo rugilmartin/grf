@@ -34,7 +34,8 @@
 #' @param num.fit.reps The number of forests used to fit the tuning model.
 #' @param num.optimize.reps The number of random parameter values considered when using the model
 #'                          to select the optimal parameters.
-#'
+#' @param verbose If true, prints the function's progress. Defaults to false.
+#' 
 #' @return A trained local linear forest object.
 #'
 #' @examples \dontrun{
@@ -64,7 +65,8 @@ local_linear_forest <- function(X, Y,
                                 tune.parameters = FALSE,
                                 num.fit.trees = 10,
                                 num.fit.reps = 100,
-                                num.optimize.reps = 1000) {
+                                num.optimize.reps = 1000,
+                                verbose = FALSE) {
   validate_X(X)
   if(length(Y) != nrow(X)) { stop("Y has incorrect length.") }
 
@@ -75,6 +77,7 @@ local_linear_forest <- function(X, Y,
   honesty.fraction <- validate_honesty_fraction(honesty.fraction, honesty)
 
   if (tune.parameters) {
+    if(verbose) cat("0: Tuning parameters. \n")
     tuning.output <- tune_regression_forest(X, Y,
                                             num.fit.trees = num.fit.trees,
                                             num.fit.reps = num.fit.reps,
@@ -103,6 +106,7 @@ local_linear_forest <- function(X, Y,
   data <- create_data_matrices(X, Y)
   outcome.index <- ncol(X) + 1
 
+  if(verbose) cat("1: Training forest \n")
   forest <- regression_train(data$default, data$sparse, outcome.index,
                              as.numeric(tunable.params["mtry"]),
                              num.trees,
@@ -116,7 +120,8 @@ local_linear_forest <- function(X, Y,
                              as.numeric(tunable.params["alpha"]),
                              as.numeric(tunable.params["imbalance.penalty"]),
                              clusters,
-                             samples_per_cluster)
+                             samples_per_cluster,
+                             verbose)
 
   forest[["ci.group.size"]] <- ci.group.size
   forest[["X.orig"]] <- X
@@ -127,11 +132,12 @@ local_linear_forest <- function(X, Y,
   class(forest) <- c("regression_forest", "grf")
 
   if (compute.oob.predictions) {
-    oob.pred <- predict(forest)
+    if(verbose) cat("--Computing out-of-bag predictions \n")
+    oob.pred <- predict(forest, verbose=verbose)
     forest[["predictions"]] <- oob.pred$predictions
     forest[["debiased.error"]] <- oob.pred$debiased.error
   }
-
+  
   class(forest) = c("local_linear_forest", "grf")
   forest
 }
@@ -157,6 +163,7 @@ local_linear_forest <- function(X, Y,
 #'                    automatically selects an appropriate amount.
 #' @param estimate.variance Whether variance estimates for hat{tau}(x) are desired
 #'                          (for confidence intervals).
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return A vector of predictions.
@@ -186,9 +193,11 @@ predict.local_linear_forest <- function(object, newdata = NULL,
                                         lambda.path = NULL,
                                         ll.weighted.penalty = FALSE,
                                         num.threads = NULL,
-                                        estimate.variance = FALSE,
+                                        estimate.variance = FALSE, 
+                                        verbose = FALSE,
                                         ...) {
 
+  if(verbose) cat("    ->Setup \n")
   forest.short = object[-which(names(object) == "X.orig")]
   X.orig = object[["X.orig"]]
   if (is.null(linear.correction.variables)) {
@@ -216,12 +225,14 @@ predict.local_linear_forest <- function(object, newdata = NULL,
   linear.correction.variables = linear.correction.variables - 1
 
   if (!is.null(newdata) ) {
+    if(verbose) cat("    ->Predictions on new data \n")
     data = create_data_matrices(newdata)
     training.data = create_data_matrices(X.orig)
     ret = local_linear_predict(forest.short, data$default, training.data$default, data$sparse,
                   training.data$sparse, ll.lambda, ll.weighted.penalty, linear.correction.variables,
                   num.threads, ci.group.size)
   } else {
+     if(verbose) cat("    ->Out-of-bag predictions \n")
      data = create_data_matrices(X.orig)
      ret = local_linear_predict_oob(forest.short, data$default, data$sparse, ll.lambda, ll.weighted.penalty,
                   linear.correction.variables, num.threads, ci.group.size)

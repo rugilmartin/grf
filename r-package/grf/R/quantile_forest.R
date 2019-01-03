@@ -32,6 +32,7 @@
 #' @param samples_per_cluster If sampling by cluster, the number of observations to be sampled from
 #'                            each cluster. Must be less than the size of the smallest cluster. If set to NULL
 #'                            software will set this value to the size of the smallest cluster.
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #'
 #' @return A trained quantile forest object.
 #'
@@ -65,7 +66,7 @@ quantile_forest <- function(X, Y, quantiles = c(0.1, 0.5, 0.9), regression.split
                             sample.fraction = 0.5, mtry = NULL, num.trees = 2000,
                             num.threads = NULL, min.node.size = NULL, honesty = TRUE,
                             honesty.fraction = NULL, alpha = 0.05, imbalance.penalty = 0.0, 
-                            seed = NULL, clusters = NULL, samples_per_cluster = NULL) {
+                            seed = NULL, clusters = NULL, samples_per_cluster = NULL, verbose = FALSE) {
     if (!is.numeric(quantiles) | length(quantiles) < 1) {
         stop("Error: Must provide numeric quantiles")
     } else if (min(quantiles) <= 0 | max(quantiles) >= 1) {
@@ -89,9 +90,10 @@ quantile_forest <- function(X, Y, quantiles = c(0.1, 0.5, 0.9), regression.split
 
     ci.group.size <- 1
     
+    if(verbose) cat("--Training forest \n")
     forest <- quantile_train(quantiles, regression.splitting, data$default, data$sparse, outcome.index, mtry, 
         num.trees, num.threads, min.node.size, sample.fraction, seed, honesty, coerce_honesty_fraction(honesty.fraction), 
-        ci.group.size, alpha, imbalance.penalty, clusters, samples_per_cluster)
+        ci.group.size, alpha, imbalance.penalty, clusters, samples_per_cluster, verbose)
     
     forest[["X.orig"]] <- X
     forest[["clusters"]] <- clusters
@@ -112,6 +114,7 @@ quantile_forest <- function(X, Y, quantiles = c(0.1, 0.5, 0.9), regression.split
 #' @param quantiles Vector of quantiles at which estimates are required.
 #' @param num.threads Number of threads used in training. If set to NULL, the software
 #'                    automatically selects an appropriate amount.
+#' @param verbose If true, prints the function's progress. Defaults to false.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return Predictions at each test point for each desired quantile.
@@ -137,8 +140,11 @@ quantile_forest <- function(X, Y, quantiles = c(0.1, 0.5, 0.9), regression.split
 predict.quantile_forest <- function(object,
                                     newdata = NULL,
                                     quantiles = c(0.1, 0.5, 0.9),
-                                    num.threads = NULL, ...) {
+                                    num.threads = NULL, 
+                                    verbose = FALSE,
+                                    ...) {
     
+    if(verbose) cat("    ->Setup \n")
     if (!is.numeric(quantiles) | length(quantiles) < 1) {
         stop("Error: Must provide numeric quantiles")
     } else if (min(quantiles) <= 0 | max(quantiles) >= 1) {
@@ -150,9 +156,11 @@ predict.quantile_forest <- function(object,
     forest.short <- object[-which(names(object) == "X.orig")]
     
     if (!is.null(newdata)) {
+        if(verbose) cat("    ->Predictions on new data \n")
         data <- create_data_matrices(newdata)
         quantile_predict(forest.short, quantiles, data$default, data$sparse, num.threads)
     } else {
+        if(verbose) cat("    ->Out-of-bag predictions \n")
         data <- create_data_matrices(object[["X.orig"]])
         quantile_predict_oob(forest.short, quantiles, data$default, data$sparse, num.threads)
     }
