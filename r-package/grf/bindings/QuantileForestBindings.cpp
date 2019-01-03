@@ -27,14 +27,19 @@ Rcpp::List quantile_train(std::vector<double> quantiles,
                           double alpha,
                           double imbalance_penalty,
                           std::vector<size_t> clusters,
-                          unsigned int samples_per_cluster) {
+                          unsigned int samples_per_cluster,
+                          bool verbose) {
   ForestTrainer trainer = regression_splits
       ? ForestTrainers::regression_trainer(outcome_index - 1)
       : ForestTrainers::quantile_trainer(outcome_index - 1, quantiles);
 
+  std::ostream* verbose_out = RcppUtilities::verbose_out(verbose);
+  if(verbose_out)
+    *verbose_out << "    ->Setup" << std::endl;
+
   Data* data = RcppUtilities::convert_data(input_data, sparse_input_data);
   ForestOptions options(num_trees, ci_group_size, sample_fraction, mtry, min_node_size, honesty,
-      honesty_fraction, alpha, imbalance_penalty, num_threads, seed, clusters, samples_per_cluster);
+      honesty_fraction, alpha, imbalance_penalty, num_threads, seed, clusters, samples_per_cluster, verbose_out);
 
   Forest forest = trainer.train(data, options);
 
