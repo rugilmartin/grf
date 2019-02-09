@@ -66,43 +66,49 @@ const Forest ForestTrainer::train(Data* data,
   }
   Observations observations(observations_by_type, data->get_num_rows());
 
-  uint num_groups = (uint) num_trees / options.get_ci_group_size();
+  uint n_progress_bar = 5;
 
-  std::vector<uint> thread_ranges;
-  split_sequence(thread_ranges, 0, num_groups - 1, options.get_num_threads());
-
-  std::vector<std::future<std::vector<std::shared_ptr<Tree>>>> futures;
-  futures.reserve(thread_ranges.size());
+  std::vector<uint> progress_ranges;
+  split_sequence(progress_ranges, 0, num_trees-1, n_progress_bar);
 
   std::vector<std::shared_ptr<Tree>> trees;
   trees.reserve(num_trees);
 
-  for (uint i = 0; i < thread_ranges.size() - 1; ++i) {
-    size_t start_index = thread_ranges[i];
-    size_t num_trees_batch = thread_ranges[i + 1] - start_index;
+  for(uint j = 0; j < n_progress_bar; ++j){
+    uint trees_j = progress_ranges[j+1] - progress_ranges[j];
+    uint num_groups = trees_j / options.get_ci_group_size();
+
+    std::vector<uint> thread_ranges;
+    split_sequence(thread_ranges, 0, num_groups - 1, options.get_num_threads());
+
+    std::vector<std::future<std::vector<std::shared_ptr<Tree>>>> futures;
+    futures.reserve(thread_ranges.size());
+
+    for (uint i = 0; i < thread_ranges.size() - 1; ++i) {
+      size_t start_index = thread_ranges[i];
+      size_t num_trees_batch = thread_ranges[i + 1] - start_index;
+
+      futures.push_back(std::async(std::launch::async,
+                                   &ForestTrainer::train_batch,
+                                   this,
+                                   start_index,
+                                   num_trees_batch,
+                                   data,
+                                   observations,
+                                   options));
+    }
+
+    for (auto& future : futures) {
+      std::vector<std::shared_ptr<Tree>> thread_trees = future.get();
+      trees.insert(trees.end(), thread_trees.begin(), thread_trees.end());
+    }
 
     if(verbose_out)
-        *verbose_out << "    ->Trained " << start_index << "/" << num_trees << " trees \r" << std::flush;
-
-    futures.push_back(std::async(std::launch::async,
-                                 &ForestTrainer::train_batch,
-                                 this,
-                                 start_index,
-                                 num_trees_batch,
-                                 data,
-                                 observations,
-                                 options));
+      *verbose_out << "    ->Trained " << progress_ranges[j+1] << "/" << num_trees << " trees \r" << std::flush;
   }
 
-  if(verbose_out) {
-    *verbose_out << "    ->Trained " << num_trees << "/" << num_trees << " trees" << std::endl;
-    *verbose_out << "    ->Creating forest" << std::endl;
-  }
-
-  for (auto& future : futures) {
-    std::vector<std::shared_ptr<Tree>> thread_trees = future.get();
-    trees.insert(trees.end(), thread_trees.begin(), thread_trees.end());
-  }
+  if(verbose_out)
+      *verbose_out << "    ->Trained " << num_trees << "/" << num_trees << " trees" << std::endl;
 
   return Forest::create(trees, data, observables);
 }
@@ -136,6 +142,7 @@ std::vector<std::shared_ptr<Tree>> ForestTrainer::train_batch(
       std::vector<std::shared_ptr<Tree>> group = train_ci_group(data, observations, sampler, options);
       trees.insert(trees.end(), group.begin(), group.end());
     }
+
   }
   return trees;
 }
