@@ -102,9 +102,10 @@ const Forest ForestTrainer::train(Data* data,
       trees.insert(trees.end(), thread_trees.begin(), thread_trees.end());
     }
 
-    if(verbose_out){
-      uint trees_trained = progress_ranges[j+1] * options.get_ci_group_size();
-      *verbose_out << "    ->Trained " << trees_trained << "/" << num_trees << " trees \r" << std::flush;
+    if(verbose_out) {
+        uint trees_trained = progress_ranges[j + 1] * options.get_ci_group_size();
+        *verbose_out << "    ->Trained " << trees_trained << "/" << num_trees << " trees \r" << std::flush;
+    }
   }
 
   if(verbose_out)
