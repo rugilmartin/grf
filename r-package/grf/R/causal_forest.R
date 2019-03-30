@@ -44,8 +44,13 @@
 #' @param seed The seed of the C++ random number generator.
 #' @param clusters Vector of integers or factors specifying which cluster each observation corresponds to.
 #' @param samples_per_cluster If sampling by cluster, the number of observations to be sampled from
-#'                            each cluster. Must be less than the size of the smallest cluster. If set to NULL
-#'                            software will set this value to the size of the smallest cluster.#'
+#'                            each cluster when training a tree. If NULL, we set samples_per_cluster to the size
+#'                            of the smallest cluster. If some clusters are smaller than samples_per_cluster,
+#'                            the whole cluster is used every time the cluster is drawn. Note that
+#'                            clusters with less than samples_per_cluster observations get relatively
+#'                            smaller weight than others in training the forest, i.e., the contribution
+#'                            of a given cluster to the final forest scales with the minimum of
+#'                            the number of observations in the cluster and samples_per_cluster.
 #' @param tune.parameters If true, NULL parameters are tuned by cross-validation; if false
 #'                        NULL parameters are set to defaults.
 #' @param num.fit.trees The number of trees in each 'mini forest' used to fit the tuning model.
@@ -167,12 +172,9 @@ causal_forest <- function(X, Y, W,
       stop("W.hat has incorrect length.")
     }
 
-    Y.centered = Y - Y.hat
-    W.centered = W - W.hat
-
     if (tune.parameters) {
       if(verbose) cat("--Tuning parameters \n")
-      tuning.output <- tune_causal_forest(X, Y.centered, W.centered,
+      tuning.output <- tune_causal_forest(X, Y, W, Y.hat, W.hat,
                                           num.fit.trees = num.fit.trees,
                                           num.fit.reps = num.fit.reps,
                                           num.optimize.reps = num.optimize.reps,
@@ -197,6 +199,9 @@ causal_forest <- function(X, Y, W,
         alpha = validate_alpha(alpha),
         imbalance.penalty = validate_imbalance_penalty(imbalance.penalty))
     }
+    
+    Y.centered = Y - Y.hat
+    W.centered = W - W.hat
 
     data <- create_data_matrices(X, Y.centered, W.centered)
     outcome.index <- ncol(X) + 1
@@ -249,10 +254,11 @@ causal_forest <- function(X, Y, W,
 #' Gets estimates of tau(x) using a trained causal forest.
 #'
 #' @param object The trained forest.
-#' @param newdata Points at which predictions should be made. If NULL,
-#'                makes out-of-bag predictions on the training set instead
-#'                (i.e., provides predictions at Xi using only trees that did
-#'                not use the i-th training example).
+#' @param newdata Points at which predictions should be made. If NULL, makes out-of-bag
+#'                predictions on the training set instead (i.e., provides predictions at
+#'                Xi using only trees that did not use the i-th training example). Note
+#'                that this matrix should have the number of columns as the training
+#'                matrix, and that the columns must appear in the same order.
 #' @param num.threads Number of threads used in training. If set to NULL, the software
 #'                    automatically selects an appropriate amount.
 #' @param estimate.variance Whether variance estimates for hat{tau}(x) are desired
@@ -300,25 +306,31 @@ predict.causal_forest <- function(object,
     }
 
     if(verbose) cat("    ->Setup \n")
+    forest.short <- object[-which(names(object) == "X.orig")]
+
+    X = object[["X.orig"]]
+    Y.centered = object[["Y.orig"]] - object[["Y.hat"]]
+    W.centered = object[["W.orig"]] - object[["W.hat"]]
+    train.data <- create_data_matrices(X, Y.centered, W.centered)
+
+    outcome.index <- ncol(X) + 1
+    treatment.index <- ncol(X) + 2
+    instrument.index <- treatment.index
+
     num.threads <- validate_num_threads(num.threads)
 
-    if (estimate.variance) {
-        ci.group.size = object$ci.group.size
-    } else {
-        ci.group.size = 1
-    }
-
-    forest.short <- object[-which(names(object) == "X.orig")]
     if (!is.null(newdata)) {
         if(verbose) cat("    ->Predictions on new data \n")
+        validate_newdata(newdata, object$X.orig)
         data <- create_data_matrices(newdata)
-        ret <- instrumental_predict(forest.short, data$default, data$sparse,
-                                    num.threads, ci.group.size)
+        ret <- instrumental_predict(forest.short, train.data$default, train.data$sparse,
+            outcome.index, treatment.index, instrument.index,
+            data$default, data$sparse, num.threads, estimate.variance)
     } else {
         if(verbose) cat("    ->Out-of-bag predictions \n")
-        data <- create_data_matrices(object[["X.orig"]])
-        ret <- instrumental_predict_oob(forest.short, data$default, data$sparse,
-                                        num.threads, ci.group.size)
+        ret <- instrumental_predict_oob(forest.short, train.data$default, train.data$sparse,
+          outcome.index, treatment.index, instrument.index,
+          num.threads, estimate.variance)
     }
 
     # Convert list to data frame.

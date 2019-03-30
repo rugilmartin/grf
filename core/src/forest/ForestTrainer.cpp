@@ -24,17 +24,14 @@
 #include "commons/utility.h"
 #include "ForestTrainer.h"
 
-ForestTrainer::ForestTrainer(const std::unordered_map<size_t, size_t>& observables,
-                             std::shared_ptr<RelabelingStrategy> relabeling_strategy,
+ForestTrainer::ForestTrainer(std::shared_ptr<RelabelingStrategy> relabeling_strategy,
                              std::shared_ptr<SplittingRuleFactory> splitting_rule_factory,
                              std::shared_ptr<OptimizedPredictionStrategy> prediction_strategy) :
-    observables(observables),
-    tree_trainer(observables,
-                 relabeling_strategy,
+    tree_trainer(relabeling_strategy,
                  splitting_rule_factory,
                  prediction_strategy) {}
 
-const Forest ForestTrainer::train(Data* data,
+const Forest ForestTrainer::train(const Data* data,
                                   const ForestOptions& options) const {
   size_t num_samples = data->get_num_rows();
   uint num_trees = options.get_num_trees();
@@ -51,22 +48,7 @@ const Forest ForestTrainer::train(Data* data,
     throw std::runtime_error("The honesty fraction is too close to 1 or 0, as no observations will be sampled.");
   }
 
-
-
-  size_t num_types = observables.size();
-  std::vector<std::vector<double>> observations_by_type(num_types);
-  for (auto it : observables) {
-    size_t type = it.first;
-    size_t index = it.second;
-
-    observations_by_type[type].resize(num_samples);
-    for (size_t row = 0; row < data->get_num_rows(); ++row) {
-      observations_by_type[type][row] = data->get(row, index);
-    }
-  }
-  Observations observations(observations_by_type, data->get_num_rows());
-
-  uint num_groups = num_trees / options.get_ci_group_size();
+  uint num_groups = (uint) num_trees / options.get_ci_group_size();
   uint n_progress_bar = 5;
 
   std::vector<uint> progress_ranges;
@@ -88,13 +70,12 @@ const Forest ForestTrainer::train(Data* data,
       size_t num_trees_batch = thread_ranges[i + 1] - start_index;
 
       futures.push_back(std::async(std::launch::async,
-                                   &ForestTrainer::train_batch,
-                                   this,
-                                   start_index,
-                                   num_trees_batch,
-                                   data,
-                                   observations,
-                                   options));
+              &ForestTrainer::train_batch,
+              this,
+              start_index,
+              num_trees_batch,
+              data,
+              options));
     }
 
     for (auto& future : futures) {
@@ -103,7 +84,7 @@ const Forest ForestTrainer::train(Data* data,
     }
 
     if(verbose_out) {
-        uint trees_trained = progress_ranges[j + 1] * options.get_ci_group_size();
+        size_t trees_trained = progress_ranges[j + 1] * options.get_ci_group_size();
         *verbose_out << "    ->Trained " << trees_trained << "/" << num_trees << " trees \r" << std::flush;
     }
   }
@@ -111,16 +92,15 @@ const Forest ForestTrainer::train(Data* data,
   if(verbose_out)
       *verbose_out << "    ->Trained " << num_trees << "/" << num_trees << " trees" << std::endl;
 
-  return Forest::create(trees, data, observables);
+  return Forest::create(trees, options, data);
 }
 
 std::vector<std::shared_ptr<Tree>> ForestTrainer::train_batch(
     size_t start,
     size_t num_trees,
-    Data* data,
-    const Observations& observations,
+    const Data* data,
     const ForestOptions& options) const {
-  uint ci_group_size = options.get_ci_group_size();
+  size_t ci_group_size = options.get_ci_group_size();
 
   std::mt19937_64 random_number_generator(options.get_random_seed() + start);
   std::uniform_int_distribution<uint> udist;
@@ -137,10 +117,10 @@ std::vector<std::shared_ptr<Tree>> ForestTrainer::train_batch(
     RandomSampler sampler(tree_seed, options.get_sampling_options());
 
     if (ci_group_size == 1) {
-      std::shared_ptr<Tree> tree = train_tree(data, observations, sampler, options);
+      std::shared_ptr<Tree> tree = train_tree(data, sampler, options);
       trees.push_back(tree);
     } else {
-      std::vector<std::shared_ptr<Tree>> group = train_ci_group(data, observations, sampler, options);
+      std::vector<std::shared_ptr<Tree>> group = train_ci_group(data, sampler, options);
       trees.insert(trees.end(), group.begin(), group.end());
     }
 
@@ -148,17 +128,15 @@ std::vector<std::shared_ptr<Tree>> ForestTrainer::train_batch(
   return trees;
 }
 
-std::shared_ptr<Tree> ForestTrainer::train_tree(Data* data,
-                                                const Observations& observations,
+std::shared_ptr<Tree> ForestTrainer::train_tree(const Data* data,
                                                 RandomSampler& sampler,
                                                 const ForestOptions& options) const {
   std::vector<size_t> clusters;
   sampler.sample_clusters(data->get_num_rows(), options.get_sample_fraction(), clusters);
-  return tree_trainer.train(data, observations, sampler, clusters, options.get_tree_options());
+  return tree_trainer.train(data, sampler, clusters, options.get_tree_options());
 }
 
-std::vector<std::shared_ptr<Tree>> ForestTrainer::train_ci_group(Data* data,
-                                                                 const Observations& observations,
+std::vector<std::shared_ptr<Tree>> ForestTrainer::train_ci_group(const Data* data,
                                                                  RandomSampler& sampler,
                                                                  const ForestOptions& options) const {
   std::vector<std::shared_ptr<Tree>> trees;
@@ -171,7 +149,7 @@ std::vector<std::shared_ptr<Tree>> ForestTrainer::train_ci_group(Data* data,
     std::vector<size_t> cluster_subsample;
     sampler.subsample(clusters, sample_fraction * 2, cluster_subsample);
 
-    std::shared_ptr<Tree> tree = tree_trainer.train(data, observations,
+    std::shared_ptr<Tree> tree = tree_trainer.train(data,
         sampler, cluster_subsample, options.get_tree_options());
     trees.push_back(tree);
   }

@@ -117,7 +117,7 @@ tune_regression_forest <- function(X, Y,
                                      FALSE)
 
     prediction = regression_predict_oob(small.forest, data$default, data$sparse,
-                                            num.threads, ci.group.size)
+        outcome.index, num.threads, FALSE)
     error = prediction$debiased.error
     mean(error, na.rm = TRUE)
   })

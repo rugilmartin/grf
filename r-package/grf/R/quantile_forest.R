@@ -30,8 +30,13 @@
 #' @param seed The seed for the C++ random number generator.
 #' @param clusters Vector of integers or factors specifying which cluster each observation corresponds to.
 #' @param samples_per_cluster If sampling by cluster, the number of observations to be sampled from
-#'                            each cluster. Must be less than the size of the smallest cluster. If set to NULL
-#'                            software will set this value to the size of the smallest cluster.
+#'                            each cluster when training a tree. If NULL, we set samples_per_cluster to the size
+#'                            of the smallest cluster. If some clusters are smaller than samples_per_cluster,
+#'                            the whole cluster is used every time the cluster is drawn. Note that
+#'                            clusters with less than samples_per_cluster observations get relatively
+#'                            smaller weight than others in training the forest, i.e., the contribution
+#'                            of a given cluster to the final forest scales with the minimum of
+#'                            the number of observations in the cluster and samples_per_cluster.
 #' @param verbose If true, prints the function's progress. Defaults to false.
 #'
 #' @return A trained quantile forest object.
@@ -107,10 +112,11 @@ quantile_forest <- function(X, Y, quantiles = c(0.1, 0.5, 0.9), regression.split
 #' Gets estimates of the conditional quantiles of Y given X using a trained forest.
 #'
 #' @param object The trained forest.
-#' @param newdata Points at which predictions should be made. If NULL,
-#'                makes out-of-bag predictions on the training set instead
-#'                (i.e., provides predictions at Xi using only trees that did
-#'                not use the i-th training example).
+#' @param newdata Points at which predictions should be made. If NULL, makes out-of-bag
+#'                predictions on the training set instead (i.e., provides predictions at
+#'                Xi using only trees that did not use the i-th training example). Note
+#'                that this matrix should have the number of columns as the training 
+#'                matrix, and that the columns must appear in the same order.
 #' @param quantiles Vector of quantiles at which estimates are required.
 #' @param num.threads Number of threads used in training. If set to NULL, the software
 #'                    automatically selects an appropriate amount.
@@ -154,14 +160,20 @@ predict.quantile_forest <- function(object,
     num.threads <- validate_num_threads(num.threads)
     
     forest.short <- object[-which(names(object) == "X.orig")]
-    
+
+    X <- object[["X.orig"]]
+    train.data <- create_data_matrices(X, object[["Y.orig"]])
+    outcome.index = ncol(X) + 1
+
     if (!is.null(newdata)) {
         if(verbose) cat("    ->Predictions on new data \n")
+        validate_newdata(newdata, object$X.orig)
         data <- create_data_matrices(newdata)
-        quantile_predict(forest.short, quantiles, data$default, data$sparse, num.threads)
+        quantile_predict(forest.short, quantiles, train.data$default, train.data$sparse, outcome.index,
+            data$default, data$sparse, num.threads)
     } else {
         if(verbose) cat("    ->Out-of-bag predictions \n")
-        data <- create_data_matrices(object[["X.orig"]])
-        quantile_predict_oob(forest.short, quantiles, data$default, data$sparse, num.threads)
+        quantile_predict_oob(forest.short, quantiles, train.data$default, train.data$sparse,
+            outcome.index, num.threads)
     }
 }
